@@ -48,6 +48,9 @@ export class RemoteWorker {
                 schema
                 instruction
               }
+              state {
+                session_id
+              }
             }
           }
         `;
@@ -57,26 +60,13 @@ export class RemoteWorker {
             status: 'online',
         };
 
-        const response = await fetch(this.GRAPHQL_ENDPOINT, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-fm-key': `${this.API_KEY}`,
-            },
-            body: JSON.stringify({
-                query: mutation,
-                variables: variables,
-            }),
-        });
-
-        const { data, errors = [] } = await response.json();
-        if(errors.length > 0) {
-            console.error('Error creating worker:', errors);
+        const result = await this.graphqlRequest(mutation, variables);
+        if(result.errors && result.errors.length > 0) {
+            console.error('Error creating worker:', result.errors);
         }
-        
-        this.setSessionId(data.createRemoteWorker.state.session_id);
-        this.initCommands(data.createRemoteWorker.supported_commands);
-        console.log(`Worker created with ID: ${this.ID} and session ID: ${this.SESSION_ID}`);
+        this.setSessionId(result.data.createRemoteWorker.state.session_id);
+        this.initCommands(result.data.createRemoteWorker.supported_commands);
+        console.debug(`Worker created with ID: ${this.ID} and session ID: ${this.SESSION_ID}`);
     }
 
     init() {
@@ -86,8 +76,6 @@ export class RemoteWorker {
     }
 
     async getServerState() {
-        const maxRetries = 3;
-        const retryDelay = 2000; // in milliseconds
         const query = `#graphql
           query GetWorkerStatus($id: String!) {
             remoteWorker(id: $id) {
@@ -98,51 +86,16 @@ export class RemoteWorker {
           }
         `;
         
-        let attempt = 0;
-        while (attempt < maxRetries) {
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 10000); // 10 seconds timeout
-      
-          try {
-            attempt++;
-            const response = await fetch(this.GRAPHQL_ENDPOINT, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-fm-key': `${this.API_KEY}`,
-              },
-              body: JSON.stringify({ query, variables: { id: this.ID } }),
-              signal: controller.signal,
-            });
-            clearTimeout(timeout);
-      
-            if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`);
-            }
-      
-            const { data, errors = [] } = await response.json();
-            if (errors.length > 0) {
-              console.error('Error getting worker status:', errors);
-            }
-        
-            this.STATE = data.remoteWorker.state;
-            this.setSessionId(this.STATE!.session_id)
-            
-            console.info('Server state:', JSON.stringify(this.STATE, null, 2));
-            return;
-          } catch (error: any) {
-            clearTimeout(timeout);
-            console.error(`Attempt ${attempt} failed:`, error);
-            if (attempt < maxRetries) {
-              console.info(`Retrying in ${retryDelay}ms...`);
-              await new Promise(resolve => setTimeout(resolve, retryDelay));
-            } else {
-              console.error('All attempts failed.');
-              throw error;
-            }
-          }
+        const variables = { id: this.ID };
+        const result = await this.graphqlRequest(query, variables);
+        if(result.errors && result.errors.length > 0) {
+            console.error('Error getting worker status:', result.errors);
         }
-      }
+        this.STATE = result.data.remoteWorker.state;
+        this.setSessionId(this.STATE!.session_id);
+        console.info('Server state:', JSON.stringify(this.STATE, null, 2));
+    }
+
     async updateStateWithCommandResult() {
         const mutation = `
             mutation updateWorkerState($remoteWorkerId: ID!, $sessionState: JSONObject!) {
@@ -155,21 +108,9 @@ export class RemoteWorker {
             sessionState: this.STATE,
         };
    
-
-        const response = await fetch(this.GRAPHQL_ENDPOINT, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-fm-key': `${this.API_KEY}`,
-            },
-            body: JSON.stringify({ query: mutation, variables }),
-        });
-
-        const { data, errors =  [] } = await response.json();
-        
-        this.STATE = data.updateWorkerState;
+        const result = await this.graphqlRequest(mutation, variables);
+        this.STATE = result.data.updateWorkerState;
         this.setSessionId(this.STATE!.session_id);
-        
     }
 
     private hrtimeMs() {
@@ -181,7 +122,7 @@ export class RemoteWorker {
         setTimeout(() => this.loop(), this.tickLengthMs);
         const now = this.hrtimeMs();
         const delta = (now - this.previous) / 1000;
-        console.log('delta', delta);
+        console.debug('delta', delta);
         // this.updateState(delta, this.tick); // Implement state processing here
         this.processCommandQueue();
         this.previous = now;
@@ -206,7 +147,7 @@ export class RemoteWorker {
             if (typeof (this as any)[handlerName] !== 'function') {
                 console.warn(`No handler implemented for command: ${cmd.command}`);
             } else {
-                console.log(`Handler found for command: ${cmd.command}`);
+                console.info(`Handler found for command: ${cmd.command}`);
             }
         });
         // assert start and stop commands are supported
@@ -236,12 +177,12 @@ export class RemoteWorker {
             const task = this.STATE.command_queue.shift();
             if(!task && this.STATE.progress.length > 0) {
                 // finish processing
-                console.log('Finished processing all commands');
+                console.debug('Finished processing all commands');
                 await this.updateStateWithCommandResult();
                 return;
             }
             if(this.STATE?.executing){
-                console.log('Waiting for previous command to finish executing');
+                console.debug('Waiting for previous command to finish executing');
                 return;
             }
             // check that if progress has more than 5 failed commands fail
@@ -261,7 +202,7 @@ export class RemoteWorker {
             
             console.info('Processing task:', task);
             try {
-                console.log(`Processing command: ${task.command}`);
+                console.debug(`Processing command: ${task.command}`);
                 this.executing = task.command;
                 await this.executeCommand(task.command, task.params);
                 // Optionally update progress in state
@@ -340,33 +281,24 @@ export class RemoteWorker {
         `
              // Fetch the next command from the server
         // use  createWorkerCompletion(prompt: String!, worker_id: ID ) mutation
-        const nextCommandReq = await fetch(this.GRAPHQL_ENDPOINT, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-fm-key': `${this.API_KEY}`,
-            },
-            body: JSON.stringify({
-                query: `#graphql
-                    mutation createWorkerCompletion($prompt: String!, $worker_id: ID!) {
-                        createWorkerCompletion(prompt: $prompt, worker_id: $worker_id) {
-                            completion
-                            cost
-                        }
-                    }
-                `,
-                variables: {
-                    prompt,
-                    worker_id: this.ID
+        const mutation = `#graphql
+            mutation createWorkerCompletion($prompt: String!, $worker_id: ID!) {
+                createWorkerCompletion(prompt: $prompt, worker_id: $worker_id) {
+                    completion
+                    cost
                 }
-            }),
-        })
-       const { data, errors = [] } = await nextCommandReq.json();
-         if(errors.length > 0) {
-              console.error('Error getting next command:', errors);
-         }
-        const nextCommand = data.createWorkerCompletion.completion;
-         
+            }
+        `;
+        const variables = {
+            prompt,
+            worker_id: this.ID,
+        };
+
+        const result = await this.graphqlRequest(mutation, variables);
+        if(result.errors && result.errors.length > 0) {
+            console.error('Error getting next command:', result.errors);
+        }
+        const nextCommand = result.data.createWorkerCompletion.completion;
         return nextCommand;
     }
   
@@ -376,7 +308,7 @@ export class RemoteWorker {
         if (typeof (this as any)[handlerName] !== 'function') {
             console.warn(`No handler implemented for command: ${command}`);
         } else {
-            console.log(`Executing command: ${command}`);
+            console.debug(`Executing command: ${command}`);
             
             const result = await (this as any)[handlerName](params);
             // check if progress already has element with progress_data_state
@@ -399,6 +331,42 @@ export class RemoteWorker {
 
     setSessionId(session_id: string) {
         this.SESSION_ID = session_id;
+    }
+
+    // New helper method to perform GraphQL requests with retry logic
+    private async graphqlRequest(query: string, variables: any, maxRetries = 3, retryDelay = 2000): Promise<any> {
+        let attempt = 0;
+        while (attempt < maxRetries) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 10000);
+            try {
+                attempt++;
+                const response = await fetch(this.GRAPHQL_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-fm-key': `${this.API_KEY}`,
+                    },
+                    body: JSON.stringify({ query, variables }),
+                    signal: controller.signal,
+                });
+                clearTimeout(timeout);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error: any) {
+                clearTimeout(timeout);
+                console.error(`GraphQL request attempt ${attempt} failed:`, error);
+                if (attempt < maxRetries) {
+                    console.info(`Retrying in ${retryDelay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, retryDelay));
+                } else {
+                    console.error('All GraphQL request attempts failed.');
+                    throw error;
+                }
+            }
+        }
     }
 }
 

@@ -109,14 +109,14 @@ export class Stop extends Command {
     instruction = 'Stops the browser session';
 
     async execute({session_id}: { session_id: string }): Promise<any> {
-        // // close page
-        // if(this.sessions[session_id]?.page) {
-        //     const  progress_data_state = await new ExtractCleanHtml(this.sessions).execute({ selector: 'html', session_id });
-        //     await this.sessions[session_id]?.page?.close();
+        // close page
+        if(this.sessions[session_id]?.page) {
+            const  progress_data_state = await new ExtractCleanHtml(this.sessions).execute({ selector: 'html', session_id });
+            await this.sessions[session_id]?.page?.close();
             
-        //     this.sessions[session_id].page = undefined
+            this.sessions[session_id].page = undefined
     
-        // }
+        }
 
         return {
             stopped: true
