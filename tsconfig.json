@@ -1,6 +1,8 @@
 {
     "transpileOnly": true,
     "compilerOptions": {
+        "customConditions": ["source"],
+        "composite": true,
         "incremental": true,
         "experimentalDecorators": true,
         "skipLibCheck": true,

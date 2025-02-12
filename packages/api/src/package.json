@@ -1,0 +1,18 @@
+{
+    "name": "@forgemaster-workers/api",
+    "version": "1.0.0",
+    "main": "src/app.ts",
+    "scripts": {
+        "start": "node dist/app.js",
+        "build": "tsc"
+    },
+    "dependencies": {
+        "express": "4.21.2",
+        "cors": "2.8.5",
+        "helmet": "8.0.0",
+        "@forgemaster-workers/core": "1.0.0"
+    },
+    "devDependencies": {
+        "typescript": "^5.7.3"
+    }
+}
