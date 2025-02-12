@@ -7,10 +7,8 @@
         "build": "tsc"
     },
     "dependencies": {
-        "express": "4.21.2",
-        "cors": "2.8.5",
-        "helmet": "8.0.0",
-        "@forgemaster-workers/core": "1.0.0"
+        "express": "^4.17.1",
+        "cors": "^2.8.5"
     },
     "devDependencies": {
         "typescript": "^5.7.3"

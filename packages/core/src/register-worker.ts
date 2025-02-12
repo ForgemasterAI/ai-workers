@@ -1,6 +1,6 @@
 import assert from 'assert';
 import { randomUUID } from 'crypto';
-import { Command } from './command.abstract';
+import { Command } from  './command.abstract';
 
 export class RemoteWorker {
     private TICK_RATE: number = 1;
@@ -13,7 +13,7 @@ export class RemoteWorker {
     private API_KEY: string | undefined;
     public SESSION_ID: string | undefined;
     private VERSION: string | undefined;
-    private STATE: Record<string, any> | undefined;
+    private STATE: Record<string, any>;
     executing: any;
     // specific context for runnign worker, like crucial information about the underlaying library usage, preferable options and return values formats
     WORKER_COMMAND_REQUEST_INSTRUCTION: string;
@@ -29,7 +29,9 @@ export class RemoteWorker {
         this.ID = process.env.WORKER_ID || randomUUID();
         this.API_KEY = process.env.API_KEY;
         this.TICK_RATE = tickRate;
-        this.STATE = {};
+        this.STATE = {
+            progress: [],
+        };
         this.WORKER_COMMAND_REQUEST_INSTRUCTION = commandContext;
         assert.ok(this.GRAPHQL_ENDPOINT, 'GRAPHQL_ENDPOINT is not defined');
         console.info('Remote worker initialized with ID:', this.ID);
@@ -124,7 +126,7 @@ export class RemoteWorker {
             }
         
             this.STATE = data.remoteWorker.state;
-            this.setSessionId(this.STATE.session_id)
+            this.setSessionId(this.STATE!.session_id)
             
             console.info('Server state:', JSON.stringify(this.STATE, null, 2));
             return;
@@ -166,7 +168,7 @@ export class RemoteWorker {
         const { data, errors =  [] } = await response.json();
         
         this.STATE = data.updateWorkerState;
-        this.setSessionId(this.STATE.session_id);
+        this.setSessionId(this.STATE!.session_id);
         
     }
 
@@ -285,8 +287,8 @@ export class RemoteWorker {
     }
     
     private async getNextCommand() {
-        const previousStep = this.STATE.progress[this.STATE.progress.length - 2];
-        const currentStep = this.STATE.progress[this.STATE.progress.length - 1];
+        const previousStep = this.STATE!.progress[this.STATE!.progress.length - 2];
+        const currentStep = this.STATE!.progress[this.STATE!.progress.length - 1];
         let currentStepPrompt = currentStep ? ` * current step is: ${JSON.stringify({
                 commmand: currentStep?.command,
                 status: currentStep?.status,
@@ -306,7 +308,7 @@ export class RemoteWorker {
         const progress = `   # Context:
             - Current progress state is following
               * All commands exectuted with results are 
-                ${this.STATE.progress.map((progress: any) => `
+                ${this.STATE!.progress.map((progress: any) => `
                     ** Command: ${progress.command}
                     ** Status: ${progress.status}
                     `).join('\n')}
@@ -319,7 +321,7 @@ export class RemoteWorker {
 
         const prompt = `
             # Instruction
-             - You need to evaluate if ${this.STATE.user_prompt} is fulfilled based on the progress state
+             - You need to evaluate if ${this.STATE!.user_prompt} is fulfilled based on the progress state
              # If its not fulfilled you need to complete the following steps
                 1. Use state from previous step to extract the data or selectors to interact to get closes to your goal
                 2. Find the best way to move forward based on the current state
@@ -378,20 +380,20 @@ export class RemoteWorker {
             
             const result = await (this as any)[handlerName](params);
             // check if progress already has element with progress_data_state
-            if(result.progress_data_state && this.STATE.progress.some((progress: any) => progress.progress_data_state)) {
+            if(result.progress_data_state && this.STATE!.progress.some((progress: any) => progress.progress_data_state)) {
               // delete that element progress_data_state
-              for(const step of this.STATE.progress) {
+              for(const step of (this.STATE?.progress || [])) {
                 if(step.progress_data_state) {
                   delete step.progress_data_state;
                 }
               }
             }
             
-            this.STATE.progress.push({
+            this.STATE!.progress.push({
                 command,
                 status: 'success',
                 ...(typeof result === 'object' ? result : { result }),
-            });
+            })
         }
     }
 

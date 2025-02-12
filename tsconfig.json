@@ -1,20 +1,19 @@
 {
-    "transpileOnly": true,
     "compilerOptions": {
-        "customConditions": ["source"],
-        "composite": true,
-        "incremental": true,
-        "experimentalDecorators": true,
-        "skipLibCheck": true,
-        "target": "es2020",
-        "module": "NodeNext",
-        "outDir": "./app",
-        "rootDir": "./src",
-        "declaration": true,
-        "strict": false,
+        "target": "ES2020",
+        "module": "commonjs",
+        "rootDir": ".",
+        "outDir": "./dist",
+        "strict": true,
         "esModuleInterop": true,
-        "baseUrl": "."
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true
     },
-    "include": ["src"],
-    "exclude": ["node_modules", "app"]
+    "include": [
+        "packages/**/*"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist"
+    ]
 }

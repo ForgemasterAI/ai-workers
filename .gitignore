@@ -13,6 +13,9 @@ npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
 
+#VS Code
+.vscode
+
 # Dependency directories
 bower_components/
 

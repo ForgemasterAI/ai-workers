@@ -1,0 +1,32 @@
+{
+    "name": "@forgemaster-workers/core",
+    "version": "1.0.0",
+    "main": "dist/index.js",
+    "scripts": {
+        "build": "tsc"
+    },
+    "dependencies": {
+        "puppeteer": "24.1.1",
+        "puppeteer-extra": "^3.3.6",
+        "puppeteer-extra-plugin-adblocker": "^2.13.6",
+        "puppeteer-extra-plugin-stealth": "^2.11.2",
+        "cheerio": "1.0.0"
+    },
+    "devDependencies": {
+        "typescript": "^5.7.3"
+    },
+    "exports": {
+        ".": {
+            "import": "./src/index.ts",
+            "require": "./dist/index.js"
+        },
+        "./core": {
+            "import": "./src/core/register-worker.ts",
+            "require": "./dist/core/register-worker.js"
+        },
+        "./commands": {
+            "import": "./src/commands/index.ts",
+            "require": "./dist/commands/index.js"
+        }
+    }
+}
