@@ -73,26 +73,39 @@ class TwitterMaster extends RemoteWorker {
          stopped: true
       };
     }
-
-
-    async uploadMedia(params: { mediaUrl: string, mediaType: 'image' | 'video' | 'gif' }) {
-        const { mediaUrl, mediaType } = params;
-        const response = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
-        const mediaData = Buffer.from(response.data, 'binary');
-        const mediaId = await this.twitterClient.v1.uploadMedia(mediaData, { type: mediaType });
-        return mediaId;
+    
+    private getMimeType(mediaType: 'image' | 'video' | 'gif'): string {
+        switch (mediaType) {
+            case 'image':
+                return 'image/jpeg'; // adjust if needed
+            case 'video':
+                return 'video/mp4';
+            case 'gif':
+                return 'image/gif';
+            default:
+                throw new Error('Unsupported media type');
+        }
     }
+
+
+
 
     async publishTweet(params: { text: string, mediaUrls?: { url: string, type: 'image' | 'video' | 'gif' }[] }) {
         const { text, mediaUrls } = params;
-        let mediaIds: string[] = [];
+        let mediaIds: any[] = [];
         let tweet;
         assert.ok(text, 'Text is required to publish a tweet');
+        debugger
         if (mediaUrls && mediaUrls.length > 0) {
             mediaIds = await Promise.all(mediaUrls.map(async (media) => {
                 const response = await axios.get(media.url, { responseType: 'arraybuffer' });
                 const mediaData = Buffer.from(response.data, 'binary');
-                const mediaId = await this.twitterClient.v1.uploadMedia(mediaData, { type: media.type });
+                const options: any = { mimeType: this.getMimeType(media.type) };
+                if(media.type === 'video') {
+                    options.longVideo = true;
+                }
+                debugger
+                const mediaId = await this.twitterClient.v1.uploadMedia(mediaData, options);
                 return mediaId;
             }));
         }
@@ -100,10 +113,14 @@ class TwitterMaster extends RemoteWorker {
             throw new Error('You can only upload 4 media files per tweet');
         }
         if(mediaIds.length > 0) {
-            tweet = await this.twitterClient.v1.tweet(text, { media_ids: mediaIds.join(',') });
+            tweet = await this.twitterClient.v2.tweet(text, {
+                media: {
+                    media_ids: mediaIds as [string]
+                }
+            });
             
         }else{
-            tweet = await this.twitterClient.v1.tweet(text);
+            tweet = await this.twitterClient.v2.tweet(text);
         }
 
         return tweet;

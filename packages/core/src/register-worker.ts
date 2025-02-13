@@ -1,6 +1,19 @@
 import assert from 'assert';
 import { randomUUID } from 'crypto';
-import { Command } from  './command.abstract';
+import { Command } from './command.abstract';
+import winston from 'winston';
+
+const logger = winston.createLogger({
+    level: process.env.LOG_LEVEL || 'debug',
+    format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.timestamp(),
+        winston.format.printf(({ timestamp, level, message }) => `${timestamp} ${level}: ${message}`)
+    ),
+    transports: [
+        new winston.transports.Console(),
+    ],
+});
 
 export class RemoteWorker {
     private TICK_RATE: number = 1;
@@ -24,7 +37,7 @@ export class RemoteWorker {
 
     private supportedCommands: Command[] = [];
 
-    constructor({ tickRate = 1, commandContext='' } = {}) {
+    constructor({ tickRate = 1, commandContext = '' } = {}) {
         this.GRAPHQL_ENDPOINT = process.env.GRAPHQL_ENDPOINT || 'http://localhost:3030/graphql';
         this.ID = process.env.WORKER_ID || randomUUID();
         this.API_KEY = process.env.API_KEY;
@@ -34,7 +47,7 @@ export class RemoteWorker {
         };
         this.WORKER_COMMAND_REQUEST_INSTRUCTION = commandContext;
         assert.ok(this.GRAPHQL_ENDPOINT, 'GRAPHQL_ENDPOINT is not defined');
-        console.info('Remote worker initialized with ID:', this.ID);
+        logger.info(`This is a new worker with ID: ${this.ID}`);
     }
 
     async createRemoteWorker() {
@@ -61,18 +74,18 @@ export class RemoteWorker {
         };
 
         const result = await this.graphqlRequest(mutation, variables);
-        if(result.errors && result.errors.length > 0) {
-            console.error('Error creating worker:', result.errors);
+        if (result.errors && result.errors.length > 0) {
+            logger.error('Error creating worker:', result.errors);
         }
         this.setSessionId(result.data.createRemoteWorker.state.session_id);
         this.initCommands(result.data.createRemoteWorker.supported_commands);
-        console.debug(`Worker created with ID: ${this.ID} and session ID: ${this.SESSION_ID}`);
+        logger.debug(`Worker created with ID: ${this.ID} and session ID: ${this.SESSION_ID}`);
     }
 
     init() {
-      this.initCommands();
-      this.pollServer();
-      this.loop();
+        this.initCommands();
+        this.pollServer();
+        this.loop();
     }
 
     async getServerState() {
@@ -85,15 +98,15 @@ export class RemoteWorker {
             }
           }
         `;
-        
+
         const variables = { id: this.ID };
         const result = await this.graphqlRequest(query, variables);
-        if(result.errors && result.errors.length > 0) {
-            console.error('Error getting worker status:', result.errors);
+        if (result.errors && result.errors.length > 0) {
+            logger.error('Error getting worker status:', result.errors);
         }
         this.STATE = result.data.remoteWorker.state;
         this.setSessionId(this.STATE!.session_id);
-        console.info('Server state:', JSON.stringify(this.STATE, null, 2));
+        logger.debug(`Server state: ${JSON.stringify(this.STATE, null, 2)}`);
     }
 
     async updateStateWithCommandResult() {
@@ -107,7 +120,7 @@ export class RemoteWorker {
             remoteWorkerId: this.ID,
             sessionState: this.STATE,
         };
-   
+
         const result = await this.graphqlRequest(mutation, variables);
         this.STATE = result.data.updateWorkerState;
         this.setSessionId(this.STATE!.session_id);
@@ -122,8 +135,7 @@ export class RemoteWorker {
         setTimeout(() => this.loop(), this.tickLengthMs);
         const now = this.hrtimeMs();
         const delta = (now - this.previous) / 1000;
-        console.debug('delta', delta);
-        // this.updateState(delta, this.tick); // Implement state processing here
+        logger.debug(`Tick: ${this.tick}, Delta: ${delta}`);
         this.processCommandQueue();
         this.previous = now;
         this.tick++;
@@ -136,7 +148,7 @@ export class RemoteWorker {
 
     private pollServer() {
         // Poll server for state
-        setInterval(()=>this.getServerState(), 5000);
+        setInterval(() => this.getServerState(), 5000);
     }
 
     // Register and validate commands dynamically
@@ -145,9 +157,9 @@ export class RemoteWorker {
         commands.forEach((cmd) => {
             const handlerName = this.toCamelCase(cmd.command);
             if (typeof (this as any)[handlerName] !== 'function') {
-                console.warn(`No handler implemented for command: ${cmd.command}`);
+                logger.warn(`No handler implemented for command: ${cmd.command}`);
             } else {
-                console.info(`Handler found for command: ${cmd.command}`);
+                logger.info(`Handler found for command: ${cmd.command}`);
             }
         });
         // assert start and stop commands are supported
@@ -163,30 +175,30 @@ export class RemoteWorker {
     private async processCommandQueue() {
         // Ensure command_queue exists in state
         if (!this.STATE?.command_queue || !Array.isArray(this.STATE.command_queue)) {
-            console.warn('No command queue found in state.');
+            logger.warn('No command queue found in state.');
             return;
         }
-        if(this.STATE.command_queue.length === 0 && this.STATE.user_prompt && !this.executing) {
+        if (this.STATE.command_queue.length === 0 && this.STATE.user_prompt && !this.executing) {
             const nextCommand = await this.getNextCommand();
             this.STATE.command_queue.push(nextCommand);
         }
-    
+
         // Process each task in the queue
-        if(this.STATE.command_queue.length > 0) {
-            console.info('Processing command queue:', this.STATE.command_queue);
+        if (this.STATE.command_queue.length > 0) {
+            logger.debug('Processing command queue:', this.STATE.command_queue);
             const task = this.STATE.command_queue.shift();
-            if(!task && this.STATE.progress.length > 0) {
+            if (!task && this.STATE.progress.length > 0) {
                 // finish processing
-                console.debug('Finished processing all commands');
+                logger.debug('Finished processing all commands');
                 await this.updateStateWithCommandResult();
                 return;
             }
-            if(this.STATE?.executing){
-                console.debug('Waiting for previous command to finish executing');
+            if (this.STATE?.executing) {
+                logger.debug('Waiting for previous command to finish executing');
                 return;
             }
             // check that if progress has more than 5 failed commands fail
-            if(this.STATE.progress.length > 30 || this.STATE.progress.filter((progress: any) => progress.status === 'failed').length > 5) {
+            if (this.STATE.progress.length > 30 || this.STATE.progress.filter((progress: any) => progress.status === 'failed').length > 5) {
                 // fail task and push to progress
                 this.STATE.progress.push({
                     command: task.command,
@@ -199,50 +211,51 @@ export class RemoteWorker {
                 await this.createRemoteWorker();
                 return;
             }
-            
-            console.info('Processing task:', task);
+
+            logger.debug('Processing task:', task);
             try {
-                console.debug(`Processing command: ${task.command}`);
+                logger.debug(`Processing command: ${task.command}`);
                 this.executing = task.command;
                 await this.executeCommand(task.command, task.params);
                 // Optionally update progress in state
             } catch (error) {
-                console.error(`Error processing command: ${task?.command}`, error);
+                logger.error(`Error processing command: ${task?.command}`, error);
                 if (!this.STATE.progress) {
                     this.STATE.progress = [];
+                    this.STATE.active_task = undefined
                 }
-                
+
                 this.STATE.progress.push({
                     command: task.command,
                     status: 'failed',
-                    error: error.message || error
+                    error: (error as any).message || error
                 });
             }
             finally {
-            
                 await this.updateStateWithCommandResult();
                 this.executing = undefined
+              
                 // if last command was stop reset the state 
             }
         }
     }
-    
+
     private async getNextCommand() {
         const previousStep = this.STATE!.progress[this.STATE!.progress.length - 2];
         const currentStep = this.STATE!.progress[this.STATE!.progress.length - 1];
         let currentStepPrompt = currentStep ? ` * current step is: ${JSON.stringify({
-                commmand: currentStep?.command,
-                status: currentStep?.status,
-                result: currentStep?.result,
-                ...(currentStep?.progress_data_state && { progress_data_state: currentStep.progress_data_state })
-                }) || 'N/A'}` : ''
+            commmand: currentStep?.command,
+            status: currentStep?.status,
+            result: currentStep?.result,
+            ...(currentStep?.progress_data_state && { progress_data_state: currentStep.progress_data_state })
+        }) || 'N/A'}` : ''
         let previousStepPrompt = previousStep ? `  * Previous step is: ${JSON.stringify({
-                commmand: previousStep?.command,
-                status: previousStep?.status,
-                result: previousStep?.result,
-                ...(previousStep?.progress_data_state && { progress_data_state: previousStep.progress_data_state })
-              }) || 'N/A'}` : ''
-        
+            commmand: previousStep?.command,
+            status: previousStep?.status,
+            result: previousStep?.result,
+            ...(previousStep?.progress_data_state && { progress_data_state: previousStep.progress_data_state })
+        }) || 'N/A'}` : ''
+
 
         // make clone of the state.progress and remove images
         // check if progress_data_state in any of the results
@@ -253,8 +266,8 @@ export class RemoteWorker {
                     ** Command: ${progress.command}
                     ** Status: ${progress.status}
                     `).join('\n')}
-              
-              
+
+
               ${currentStepPrompt}
               ${previousStepPrompt}             
               `
@@ -266,20 +279,20 @@ export class RemoteWorker {
              # If its not fulfilled you need to complete the following steps
                 1. Use state from previous step to extract the data or selectors to interact to get closes to your goal
                 2. Find the best way to move forward based on the current state
-                
+
              - YOU are NOT LAZY and will try to make sure all steps are completed successfully
-             
+
             ${progress}
-            
+
             ${this.WORKER_COMMAND_REQUEST_INSTRUCTION}
-        
+
             # Output
             - You can only use data available in the state to generate the next command parameters and nothing else
             - Next command JSON object to be executed with parameters 
             - Stop command if more than 3 failed commands in progress state 
             - Stop If user prompt is fulfilled based on the progress state
         `
-             // Fetch the next command from the server
+        // Fetch the next command from the server
         // use  createWorkerCompletion(prompt: String!, worker_id: ID ) mutation
         const mutation = `#graphql
             mutation createWorkerCompletion($prompt: String!, $worker_id: ID!) {
@@ -295,32 +308,32 @@ export class RemoteWorker {
         };
 
         const result = await this.graphqlRequest(mutation, variables);
-        if(result.errors && result.errors.length > 0) {
-            console.error('Error getting next command:', result.errors);
+        if (result.errors && result.errors.length > 0) {
+            logger.error('Error getting next command:', result.errors);
         }
         const nextCommand = result.data.createWorkerCompletion.completion;
         return nextCommand;
     }
-  
+
 
     public async executeCommand(command: string, params: any) {
         const handlerName = this.toCamelCase(command);
         if (typeof (this as any)[handlerName] !== 'function') {
-            console.warn(`No handler implemented for command: ${command}`);
+            logger.warn(`No handler implemented for command: ${command}`);
         } else {
-            console.debug(`Executing command: ${command}`);
-            
+            logger.debug(`Executing command: ${command}`);
+
             const result = await (this as any)[handlerName](params);
             // check if progress already has element with progress_data_state
-            if(result.progress_data_state && this.STATE!.progress.some((progress: any) => progress.progress_data_state)) {
-              // delete that element progress_data_state
-              for(const step of (this.STATE?.progress || [])) {
-                if(step.progress_data_state) {
-                  delete step.progress_data_state;
+            if (result.progress_data_state && this.STATE!.progress.some((progress: any) => progress.progress_data_state)) {
+                // delete that element progress_data_state
+                for (const step of (this.STATE?.progress || [])) {
+                    if (step.progress_data_state) {
+                        delete step.progress_data_state;
+                    }
                 }
-              }
             }
-            
+
             this.STATE!.progress.push({
                 command,
                 status: 'success',
@@ -357,12 +370,12 @@ export class RemoteWorker {
                 return await response.json();
             } catch (error: any) {
                 clearTimeout(timeout);
-                console.error(`GraphQL request attempt ${attempt} failed:`, error);
+                logger.error(`GraphQL request attempt ${attempt} failed:`, error);
                 if (attempt < maxRetries) {
-                    console.info(`Retrying in ${retryDelay}ms...`);
+                    logger.info(`Retrying in ${retryDelay}ms...`);
                     await new Promise(resolve => setTimeout(resolve, retryDelay));
                 } else {
-                    console.error('All GraphQL request attempts failed.');
+                    logger.error('All GraphQL request attempts failed.');
                     throw error;
                 }
             }
