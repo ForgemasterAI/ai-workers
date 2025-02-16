@@ -1,5 +1,5 @@
 {
-    "name": "@forgemater-workers/examples",
+    "name": "@forgemater-workers/puppetmaster",
     "version": "1.0.0",
     "main": "src/index.ts",
     "scripts": {
@@ -11,8 +11,7 @@
         "puppeteer": "24.1.1",
         "puppeteer-extra": "^3.3.6",
         "puppeteer-extra-plugin-adblocker": "^2.13.6",
-        "puppeteer-extra-plugin-stealth": "^2.11.2",
-        "twitter-api-v2": "1.19.1"
+        "puppeteer-extra-plugin-stealth": "^2.11.2"
     },
     "devDependencies": {
         "typescript": "^5.7.3"

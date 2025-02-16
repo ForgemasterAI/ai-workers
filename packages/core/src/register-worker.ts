@@ -100,7 +100,7 @@ export class RemoteWorker {
         `;
 
         const variables = { id: this.ID };
-        const result = await this.graphqlRequest(query, variables);
+        const result = await this.graphqlRequest(query, variables, Infinity);
         if (result.errors && result.errors.length > 0) {
             logger.error('Error getting worker status:', result.errors);
         }
@@ -120,10 +120,16 @@ export class RemoteWorker {
             remoteWorkerId: this.ID,
             sessionState: this.STATE,
         };
+        if(!this.STATE?.progress || !this.STATE?.session_id) {
+            logger.error('State or session_id not found in updateStateWithCommandResult');
+            return;
+        }
 
         const result = await this.graphqlRequest(mutation, variables);
         this.STATE = result.data.updateWorkerState;
         this.setSessionId(this.STATE!.session_id);
+        // if stop command is issued, reset the session
+   
     }
 
     private hrtimeMs() {
@@ -168,7 +174,10 @@ export class RemoteWorker {
     }
 
     public registerCommand(command: Command) {
-        this.supportedCommands = Array.from(new Set([...this.supportedCommands, command]));
+        // Register command with toCamelCase name
+        const handlerName = this.toCamelCase(command.command);
+        (this as any)[handlerName] = command.execute.bind(command);
+        this.supportedCommands.push(command);
     }
 
     // Process the task queue
@@ -176,15 +185,17 @@ export class RemoteWorker {
         // Ensure command_queue exists in state
         if (!this.STATE?.command_queue || !Array.isArray(this.STATE.command_queue)) {
             logger.warn('No command queue found in state.');
-            return;
         }
-        if (this.STATE.command_queue.length === 0 && this.STATE.user_prompt && !this.executing) {
+        
+        if (this.STATE.command_queue?.length === 0 && this.STATE.user_prompt && !this.executing) {
+            // Fetch the next command from the server
             const nextCommand = await this.getNextCommand();
+            
             this.STATE.command_queue.push(nextCommand);
         }
 
         // Process each task in the queue
-        if (this.STATE.command_queue.length > 0) {
+        else if (this.STATE.command_queue?.length > 0) {
             logger.debug('Processing command queue:', this.STATE.command_queue);
             const task = this.STATE.command_queue.shift();
             if (!task && this.STATE.progress.length > 0) {
@@ -208,15 +219,14 @@ export class RemoteWorker {
                 // update server state
                 await this.updateStateWithCommandResult();
                 this.executing = undefined;
-                await this.createRemoteWorker();
-                return;
             }
 
-            logger.debug('Processing task:', task);
+            logger.debug(`Processing command: ${JSON.stringify(task, null, 2)}`);
             try {
                 logger.debug(`Processing command: ${task.command}`);
                 this.executing = task.command;
                 await this.executeCommand(task.command, task.params);
+                
                 // Optionally update progress in state
             } catch (error) {
                 logger.error(`Error processing command: ${task?.command}`, error);
@@ -234,8 +244,16 @@ export class RemoteWorker {
             finally {
                 await this.updateStateWithCommandResult();
                 this.executing = undefined
-              
-                // if last command was stop reset the state 
+                if(task.command === 'stop') {
+                    if(this.STATE?.progress.some((progress: any) => progress.command === 'stop')) {
+                        this.STATE = {
+                            ...this.STATE,
+                            progress: [],
+                            command_queue: [],
+                            user_prompt: ''
+                        }
+                    }
+                }
             }
         }
     }
@@ -256,7 +274,6 @@ export class RemoteWorker {
             ...(previousStep?.progress_data_state && { progress_data_state: previousStep.progress_data_state })
         }) || 'N/A'}` : ''
 
-
         // make clone of the state.progress and remove images
         // check if progress_data_state in any of the results
         const progress = `   # Context:
@@ -276,11 +293,13 @@ export class RemoteWorker {
         const prompt = `
             # Instruction
              - You need to evaluate if ${this.STATE!.user_prompt} is fulfilled based on the progress state
-             # If its not fulfilled you need to complete the following steps
+             # IF IT NOT FULFILLED YOU NEED TO FOLLOW THE FOLLOWING STEPS
                 1. Use state from previous step to extract the data or selectors to interact to get closes to your goal
                 2. Find the best way to move forward based on the current state
 
              - YOU are NOT LAZY and will try to make sure all steps are completed successfully
+             - YOU WILL AVOID ANY UNNECESSARY STEPS AND WILL NOT REPEAT ANY STEPS UNLESS NECESSARY
+             - IF TASK IS COMPLETED YOU WILL ISSUE STOP COMMAND
 
             ${progress}
 
@@ -320,6 +339,7 @@ export class RemoteWorker {
         const handlerName = this.toCamelCase(command);
         if (typeof (this as any)[handlerName] !== 'function') {
             logger.warn(`No handler implemented for command: ${command}`);
+            
         } else {
             logger.debug(`Executing command: ${command}`);
 
@@ -333,7 +353,7 @@ export class RemoteWorker {
                     }
                 }
             }
-
+            
             this.STATE!.progress.push({
                 command,
                 status: 'success',
