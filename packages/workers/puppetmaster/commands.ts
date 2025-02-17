@@ -1,11 +1,9 @@
-import  { Page, DEFAULT_INTERCEPT_RESOLUTION_PRIORITY } from 'puppeteer';
+import { Page, DEFAULT_INTERCEPT_RESOLUTION_PRIORITY } from 'puppeteer';
 import * as cheerio from 'cheerio';
 import { Command } from '../../core/src/command.abstract';
 import AdBlockPlugin from 'puppeteer-extra-plugin-adblocker';
-import StealthPlugin  from 'puppeteer-extra-plugin-stealth';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import puppeteer from 'puppeteer-extra';
-
-
 
 async function pageScreenShotToBase64(page: Page) {
     const screenshot = await page.screenshot({ encoding: 'base64' });
@@ -23,38 +21,37 @@ export class Start extends Command {
         type: 'object',
         properties: {
             url: { type: 'string' },
-            screen: { type: 'string', enum: ['desktop', 'mobile', 'iphone', 'ipad'] }
+            screen: { type: 'string', enum: ['desktop', 'mobile', 'iphone', 'ipad'] },
         },
-        required: ['url']
+        required: ['url'],
     };
     instruction = 'Navigates to the specified URL';
     expected_output = {
         type: 'object',
         properties: {
             session_id: { type: 'string' },
-            url: { type: 'string' }
-        }
+            url: { type: 'string' },
+        },
     };
 
     async execute(params: any): Promise<Record<string, any>> {
         let screen = params.screen ?? 'desktop';
-        puppeteer.use(StealthPlugin())
+        puppeteer.use(StealthPlugin());
         puppeteer.use(
             AdBlockPlugin({
-              // Optionally enable Cooperative Mode for several request interceptors
-              interceptResolutionPriority: DEFAULT_INTERCEPT_RESOLUTION_PRIORITY
-            })
-          )
-          
+                // Optionally enable Cooperative Mode for several request interceptors
+                interceptResolutionPriority: DEFAULT_INTERCEPT_RESOLUTION_PRIORITY,
+            }),
+        );
+
         const browser = await puppeteer.launch({
-            headless: false
+            headless: false,
         });
 
         const page = await browser.newPage();
-  
-        const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
-        'AppleWebKit/537.36 (KHTML, like Gecko) ' +
-        'Chrome/92.0.4515.107 Safari/537.36';
+
+        const userAgent =
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' + 'AppleWebKit/537.36 (KHTML, like Gecko) ' + 'Chrome/92.0.4515.107 Safari/537.36';
         await page.setUserAgent(userAgent);
 
         // Remove the navigator.webdriver flag
@@ -62,7 +59,7 @@ export class Start extends Command {
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
         });
         // set screen size
-        switch(screen) {
+        switch (screen) {
             case 'desktop':
                 await page.setViewport({ width: 1920, height: 1080 });
                 break;
@@ -79,16 +76,15 @@ export class Start extends Command {
                 await page.setViewport({ width: 1920, height: 1080 });
                 break;
         }
-    
-        const session_id = params?.session_id ??  Math.random().toString(36).substring(7);
-        
+
+        const session_id = params?.session_id ?? Math.random().toString(36).substring(7);
+
         this.sessions[session_id] = { browser, page };
-        
 
         return {
             screen,
-            session_id
-         };
+            session_id,
+        };
     }
 }
 
@@ -102,24 +98,23 @@ export class Stop extends Command {
     schema = {
         type: 'object',
         properties: {
-            session_id: { type: 'string' }
+            session_id: { type: 'string' },
         },
-        required: ['session_id']
+        required: ['session_id'],
     };
     instruction = 'Stops the browser session';
 
-    async execute({session_id}: { session_id: string }): Promise<any> {
+    async execute({ session_id }: { session_id: string }): Promise<any> {
         // close page
-        if(this.sessions[session_id]?.page) {
-            const  progress_data_state = await new ExtractCleanHtml(this.sessions).execute({ selector: 'html', session_id });
+        if (this.sessions[session_id]?.page) {
+            const progress_data_state = await new ExtractCleanHtml(this.sessions).execute({ selector: 'html', session_id });
             await this.sessions[session_id]?.page?.close();
-            
-            this.sessions[session_id].page = undefined
-    
+
+            this.sessions[session_id].page = undefined;
         }
 
         return {
-            stopped: true
+            stopped: true,
         };
     }
 }
@@ -134,40 +129,42 @@ export class Click extends Command {
     schema = {
         type: 'object',
         properties: {
-            selector: { type: 'string' }
+            selector: { type: 'string' },
         },
-        required: ['selector']
+        required: ['selector'],
     };
     instruction = 'Clicks on the specified element';
     expected_output = {
         type: 'boolean',
-        description: 'True if the element was clicked, false otherwise'
+        description: 'True if the element was clicked, false otherwise',
     };
 
-    async execute({selector, session_id}: any): Promise<Record<string, any>> {
+    async execute({ selector, session_id }: any): Promise<Record<string, any>> {
         const page = this.sessions[session_id].page;
         const previousUrl = page.url();
-        await page.click(selector,  { waitUntil: ['domcontentloaded', 'networkidle2'] });
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await page.click(selector, { waitUntil: ['domcontentloaded', 'networkidle2'] });
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         const currentUrl = page.url();
         let progress_data_state = undefined;
 
+        const url_change =
+            previousUrl !== currentUrl
+                ? {
+                      from: previousUrl,
+                      to: currentUrl,
+                  }
+                : undefined;
 
-        const url_change = previousUrl !== currentUrl ? {
-            from: previousUrl,
-            to: currentUrl
-        } : undefined;
-
-        if(url_change) {
+        if (url_change) {
             progress_data_state = await new ExtractCleanHtml(this.sessions).execute({ selector: 'html', session_id });
             console.log('HTML:', progress_data_state);
         }
-        
+
         return {
             clicked: true,
             selector,
             ...(url_change && { url_change }),
-            ...(progress_data_state && { progress_data_state })
+            ...(progress_data_state && { progress_data_state }),
         };
     }
 }
@@ -183,36 +180,38 @@ export class Navigate extends Command {
         type: 'object',
         properties: {
             session_id: { type: 'string' },
-            url: { type: 'string' }
+            url: { type: 'string' },
         },
-        required: ['session_id', 'url']
+        required: ['session_id', 'url'],
     };
     instruction = 'Navigates to the specified URL';
     expected_output = {
         type: 'string',
-        description: 'The URL the browser navigated to'
+        description: 'The URL the browser navigated to',
     };
 
-    async execute(params: any): Promise<Record<string, any>>{
-        
-        if(!this.sessions?.[params.session_id]?.page || !this.sessions?.[params.session_id]) {
+    async execute(params: any): Promise<Record<string, any>> {
+        if (!this.sessions?.[params.session_id]?.page || !this.sessions?.[params.session_id]) {
             // start sessions
             await new Start(this.sessions).execute({
                 session_id: params.session_id,
             });
             console.log('Session started');
         }
-        
+
         const page = this.sessions[params.session_id].page;
-        await page.goto(params.url, { waitUntil: ['domcontentloaded', 'networkidle2'] } );
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const {progress_data_state, screenshot} = await new ExtractCleanHtml(this.sessions).execute({ selector: 'html', session_id: params.session_id });
+        await page.goto(params.url, { waitUntil: ['domcontentloaded', 'networkidle2'] });
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const { progress_data_state, screenshot } = await new ExtractCleanHtml(this.sessions).execute({
+            selector: 'html',
+            session_id: params.session_id,
+        });
         console.info('HTML:', progress_data_state);
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         return {
             url: page.url(),
             progress_data_state,
-        }
+        };
     }
 }
 
@@ -227,25 +226,24 @@ export class Type extends Command {
         type: 'object',
         properties: {
             selector: { type: 'string' },
-            text: { type: 'string' }
+            text: { type: 'string' },
         },
-        required: ['selector', 'text']
+        required: ['selector', 'text'],
     };
     instruction = 'Types the specified text into the specified element';
     expected_output = {
         type: 'boolean',
-        description: 'True if the text was typed, false otherwise'
+        description: 'True if the text was typed, false otherwise',
     };
 
-    async execute(params: any): Promise<Record<string, any>>{
-        
+    async execute(params: any): Promise<Record<string, any>> {
         const page = this.sessions[params.session_id].page;
         const randomDelay = () => Math.floor(Math.random() * 150) + 100;
         const text = params.text;
         await page.focus(params.selector);
         // clean input before typing
-        await page.$eval(params.selector, (el: any) => el.value = '');
-        // type 
+        await page.$eval(params.selector, (el: any) => (el.value = ''));
+        // type
         await page.type(params.selector, text, { delay: randomDelay() });
         // make screenshot after typing
         return {
@@ -265,21 +263,21 @@ export class Select extends Command {
         type: 'object',
         properties: {
             selector: { type: 'string' },
-            value: { type: 'string' }
+            value: { type: 'string' },
         },
-        required: ['selector', 'value']
+        required: ['selector', 'value'],
     };
     instruction = 'Selects the specified value from the specified dropdown';
     expected_output = {
         type: 'boolean',
-        description: 'True if the value was selected, false otherwise'
+        description: 'True if the value was selected, false otherwise',
     };
 
     async execute(params: any): Promise<any> {
         const page = this.sessions[params.session_id].page;
         await page.select(params.selector, params.value);
         return {
-            selected: params.value
+            selected: params.value,
         };
     }
 }
@@ -290,7 +288,7 @@ export class ExtractCleanHtml extends Command {
     instruction = 'Extracts the clean HTML content of the page';
     expected_output = {
         type: 'string',
-        description: 'The clean HTML content of the element'
+        description: 'The clean HTML content of the element',
     };
     sessions: Record<string, any>;
 
@@ -299,11 +297,11 @@ export class ExtractCleanHtml extends Command {
         this.sessions = sessions;
     }
 
-    async execute(params: any): Promise<Record<string, any>>{
-        const page = this.sessions[params.session_id].page
+    async execute(params: any): Promise<Record<string, any>> {
+        const page = this.sessions[params.session_id].page;
         const html = await page.content();
         const $ = cheerio.load(html);
-        
+
         $('img[src^="data:image/"]').remove();
         $('svg').remove();
         $('script').remove();
@@ -315,14 +313,13 @@ export class ExtractCleanHtml extends Command {
         // Remove class attributes from all elements
         $('*[class]').removeAttr('class');
         const screenshot = await page.screenshot({ encoding: 'base64' });
-        
+
         return {
             progress_data_state: $.html().toString(),
             screenshot,
         };
     }
 }
-
 
 export default {
     Start,
@@ -331,5 +328,5 @@ export default {
     Type,
     Navigate,
     Select,
-    ExtractCleanHtml
-}
+    ExtractCleanHtml,
+};

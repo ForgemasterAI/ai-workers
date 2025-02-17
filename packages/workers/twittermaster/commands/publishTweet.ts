@@ -15,12 +15,12 @@ export class PublishTweet extends Command {
                     type: 'object',
                     properties: {
                         url: { type: 'string' },
-                        type: { type: 'string', enum: ['image', 'video', 'gif'] }
-                    }
-                }
-            }
+                        type: { type: 'string', enum: ['image', 'video', 'gif'] },
+                    },
+                },
+            },
         },
-        required: ['text']
+        required: ['text'],
     };
     instruction = `
     # Publish a tweet
@@ -36,10 +36,14 @@ export class PublishTweet extends Command {
 
     private getMimeType(mediaType: 'image' | 'video' | 'gif'): string {
         switch (mediaType) {
-            case 'image': return 'image/jpeg';
-            case 'video': return 'video/mp4';
-            case 'gif': return 'image/gif';
-            default: throw new Error('Unsupported media type');
+            case 'image':
+                return 'image/jpeg';
+            case 'video':
+                return 'video/mp4';
+            case 'gif':
+                return 'image/gif';
+            default:
+                throw new Error('Unsupported media type');
         }
     }
 
@@ -49,15 +53,17 @@ export class PublishTweet extends Command {
         let tweet;
         assert.ok(text, 'Text is required to publish a tweet');
         if (mediaUrls && mediaUrls.length > 0) {
-            mediaIds = await Promise.all(mediaUrls.map(async (media: any) => {
-                const response = await axios.get(media.url, { responseType: 'arraybuffer' });
-                const mediaData = Buffer.from(response.data, 'binary');
-                const options: any = { mimeType: this.getMimeType(media.type) };
-                if (media.type === 'video') {
-                    options.longVideo = true;
-                }
-                return await this.twitterClient.v1.uploadMedia(mediaData, options);
-            }));
+            mediaIds = await Promise.all(
+                mediaUrls.map(async (media: any) => {
+                    const response = await axios.get(media.url, { responseType: 'arraybuffer' });
+                    const mediaData = Buffer.from(response.data, 'binary');
+                    const options: any = { mimeType: this.getMimeType(media.type) };
+                    if (media.type === 'video') {
+                        options.longVideo = true;
+                    }
+                    return await this.twitterClient.v1.uploadMedia(mediaData, options);
+                }),
+            );
         }
         if (mediaIds.length > 4) {
             throw new Error('You can only upload 4 media files per tweet');

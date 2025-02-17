@@ -1,4 +1,3 @@
-import assert from "assert";
 
 export abstract class Command {
     abstract command: string;
@@ -8,5 +7,4 @@ export abstract class Command {
     abstract execute(params: any): Promise<any>;
     // enforce params JSON schema to be defined
     constructor() {}
-
 }

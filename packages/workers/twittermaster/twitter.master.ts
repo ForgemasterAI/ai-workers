@@ -9,10 +9,10 @@ class Start extends Command {
         type: 'object',
         properties: {
             sessions: { type: 'object' },
-            session_id: { type: 'string' }
+            session_id: { type: 'string' },
         },
-        required: ['sessions']
-    }
+        required: ['sessions'],
+    };
     instruction = `
     # Start a new session
     This command starts a new session and returns a session id.
@@ -30,10 +30,10 @@ class Stop extends Command {
     schema = {
         type: 'object',
         properties: {
-            session_id: { type: 'string' }
+            session_id: { type: 'string' },
         },
-        required: ['session_id']
-    }
+        required: ['session_id'],
+    };
     instruction = `
     # Stop the session
     This command stops the current session.
@@ -53,7 +53,7 @@ class TwitterMaster extends RemoteWorker {
             commandContext: `
             # Twitter API Guide
             This worker uses the Twitter API to publish posts to Twitter.
-            `
+            `,
         });
         this.sessions = {};
         this.twitterClient = new TwitterApi({
@@ -61,7 +61,7 @@ class TwitterMaster extends RemoteWorker {
             appKey: process.env.TWITTER_APP_KEY!,
             appSecret: process.env.TWITTER_APP_SECRET!,
             accessToken: process.env.TWITTER_ACCESS_TOKEN!,
-            accessSecret: process.env.TWITTER_TOKEN_SECRET!
+            accessSecret: process.env.TWITTER_TOKEN_SECRET!,
         });
         // Register command handlers
         this.registerCommand(new Start());
@@ -71,6 +71,5 @@ class TwitterMaster extends RemoteWorker {
 }
 
 export const twitterMaster = new TwitterMaster();
-
 
 twitterMaster.init();
