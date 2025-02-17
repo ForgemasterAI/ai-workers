@@ -198,35 +198,43 @@ export class RemoteWorker {
         else if (this.STATE.command_queue?.length > 0) {
             logger.debug('Processing command queue:', this.STATE.command_queue);
             const task = this.STATE.command_queue.shift();
-            if (!task && this.STATE.progress.length > 0) {
-                // finish processing
-                logger.debug('Finished processing all commands');
-                await this.updateStateWithCommandResult();
-                return;
-            }
-            if (this.STATE?.executing) {
-                logger.debug('Waiting for previous command to finish executing');
-                return;
-            }
-            // check that if progress has more than 5 failed commands fail
-            if (this.STATE.progress.length > 30 || this.STATE.progress.filter((progress: any) => progress.status === 'failed').length > 5) {
-                // fail task and push to progress
-                this.STATE.progress.push({
-                    command: task.command,
-                    status: 'failed',
-                    error: 'Task took too long to complete'
-                });
-                // update server state
-                await this.updateStateWithCommandResult();
-                this.executing = undefined;
-            }
+           
 
             logger.debug(`Processing command: ${JSON.stringify(task, null, 2)}`);
             try {
-                logger.debug(`Processing command: ${task.command}`);
-                this.executing = task.command;
-                await this.executeCommand(task.command, task.params);
-                
+                if (!task && this.STATE.progress.length > 0) {
+                    // finish processing
+                    logger.debug('Finished processing all commands');
+                    await this.updateStateWithCommandResult();
+                    return;
+                }
+                if (this.STATE?.executing) {
+                    logger.debug('Waiting for previous command to finish executing');
+                    return;
+                }
+                const failedLength = this.STATE.progress.filter((progress: any) => progress.status === 'failed').length;
+                // check that if progress has more than 5 failed commands fail
+                if (this.STATE.progress.length > 30 || failedLength > 1) {
+                    // fail task and push to progress
+                    this.STATE.progress.push({
+                        command: task.command,
+                        status: 'failed',
+                        error: 'Task took too long to complete'
+                    });
+                    if(failedLength > 1) {
+                        this.STATE.progress.push({
+                            command: 'stop',
+                            status: 'success',
+                            error: 'Task took too long to complete'
+                        });
+                    }
+                    // update server state
+                    await this.updateStateWithCommandResult();
+                }else{
+                    logger.debug(`Processing command: ${task.command}`);
+                    this.executing = task.command;
+                    await this.executeCommand(task.command, task.params);
+                }                
                 // Optionally update progress in state
             } catch (error) {
                 logger.error(`Error processing command: ${task?.command}`, error);
@@ -236,7 +244,7 @@ export class RemoteWorker {
                 }
 
                 this.STATE.progress.push({
-                    command: task.command,
+                    command: task?.command,
                     status: 'failed',
                     error: (error as any).message || error
                 });
@@ -244,7 +252,7 @@ export class RemoteWorker {
             finally {
                 await this.updateStateWithCommandResult();
                 this.executing = undefined
-                if(task.command === 'stop') {
+                if(task?.command === 'stop') {
                     if(this.STATE?.progress.some((progress: any) => progress.command === 'stop')) {
                         this.STATE = {
                             ...this.STATE,
