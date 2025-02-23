@@ -2,7 +2,7 @@ import { RemoteWorker } from '../../core/src/register-worker';
 import { Click, ExtractCleanHtml, Navigate, Select, Start, Stop, Type } from './commands';
 
 class PupperMaster extends RemoteWorker {
-    sessions: {};
+    sessions: Record<string, any>;
     constructor() {
         super({
             commandContext: `
@@ -35,7 +35,7 @@ class PupperMaster extends RemoteWorker {
         const result = await new Stop(this.sessions).execute({ ...params, session_id: this.SESSION_ID });
         // reset the session id
         delete this.SESSION_ID;
-        delete this.sessions[params.session_id];
+        delete this.sessions[params.session_id as string];
         return result;
     }
 

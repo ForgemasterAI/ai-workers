@@ -25,7 +25,7 @@ export class RemoteWorker {
     public SESSION_ID: string | undefined;
     private VERSION: string | undefined;
     private STATE: Record<string, any>;
-    executing: any;
+    executing: boolean | string | undefined;
     // specific context for runnign worker, like crucial information about the underlaying library usage, preferable options and return values formats
     WORKER_COMMAND_REQUEST_INSTRUCTION: string;
 
@@ -91,16 +91,23 @@ export class RemoteWorker {
           query GetWorkerStatus($id: String!) {
             remoteWorker(id: $id) {
               id
-              status
               state
             }
           }
         `;
 
         const variables = { id: this.ID };
-        const result = await this.graphqlRequest(query, variables, Infinity);
+        const result = await this.graphqlRequest(query, variables, 2000).catch((error) => {
+            logger.error('Error getting worker status:', error);
+            return { data: { remoteWorker: {} } };
+        })
+        
         if (result.errors && result.errors.length > 0) {
             logger.error('Error getting worker status:', result.errors);
+        }
+        if(!result.data.remoteWorker) {
+            logger.error('No worker found in getServerState');
+            return
         }
         this.STATE = result.data.remoteWorker.state;
         this.setSessionId(this.STATE!.session_id);
@@ -264,7 +271,7 @@ export class RemoteWorker {
     private async getNextCommand() {
         const previousStep = this.STATE!.progress[this.STATE!.progress.length - 2];
         const currentStep = this.STATE!.progress[this.STATE!.progress.length - 1];
-        let currentStepPrompt = currentStep
+        const currentStepPrompt = currentStep
             ? ` * current step is: ${
                   JSON.stringify({
                       commmand: currentStep?.command,
@@ -274,7 +281,7 @@ export class RemoteWorker {
                   }) || 'N/A'
               }`
             : '';
-        let previousStepPrompt = previousStep
+        const previousStepPrompt = previousStep
             ? `  * Previous step is: ${
                   JSON.stringify({
                       commmand: previousStep?.command,
@@ -377,7 +384,7 @@ export class RemoteWorker {
     }
 
     // New helper method to perform GraphQL requests with retry logic
-    private async graphqlRequest(query: string, variables: any, maxRetries = 3, retryDelay = 2000): Promise<any> {
+    private async graphqlRequest(query: string, variables: any, maxRetries = 3, retryDelay = 5000): Promise<any> {
         let attempt = 0;
         while (attempt < maxRetries) {
             const controller = new AbortController();

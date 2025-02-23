@@ -17,7 +17,7 @@ class Start extends Command {
     # Start a new session
     This command starts a new session and returns a session id.
     `;
-    async execute(params: any): Promise<Record<string, any>> {
+    async execute(params: { sessions: Record<string, unknown>, session_id?: string }): Promise<{ session_id: string }> {
         const { sessions, session_id } = params;
         const newSessionId = session_id || Date.now().toString();
         sessions[newSessionId] = {};
@@ -38,14 +38,14 @@ class Stop extends Command {
     # Stop the session
     This command stops the current session.
     `;
-    async execute(params: any): Promise<any> {
+    async execute(_params: { session_id: string }): Promise<{ stopped: boolean }> {
         // Implementation for stopping a session
         return { stopped: true };
     }
 }
 
 class TwitterMaster extends RemoteWorker {
-    sessions: Record<string, any>;
+    sessions: Record<string, unknown>;
     twitterClient: TwitterApi;
 
     constructor() {

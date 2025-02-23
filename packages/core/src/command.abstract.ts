@@ -1,10 +1,7 @@
-
-export abstract class Command {
+export abstract class Command<P = unknown, R = unknown> {
     abstract command: string;
-    abstract schema: Record<string, any>;
+    abstract schema: Record<string, unknown>;
     abstract instruction: string;
-
-    abstract execute(params: any): Promise<any>;
-    // enforce params JSON schema to be defined
+    abstract execute(params: P): Promise<R>;
     constructor() {}
 }

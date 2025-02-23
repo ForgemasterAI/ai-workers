@@ -1,14 +1,11 @@
-import { Page, DEFAULT_INTERCEPT_RESOLUTION_PRIORITY } from 'puppeteer';
+import { DEFAULT_INTERCEPT_RESOLUTION_PRIORITY } from 'puppeteer';
 import * as cheerio from 'cheerio';
 import { Command } from '../../core/src/command.abstract';
 import AdBlockPlugin from 'puppeteer-extra-plugin-adblocker';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import puppeteer from 'puppeteer-extra';
 
-async function pageScreenShotToBase64(page: Page) {
-    const screenshot = await page.screenshot({ encoding: 'base64' });
-    return screenshot;
-}
+
 
 export class Start extends Command {
     sessions: Record<string, any>;
@@ -35,7 +32,7 @@ export class Start extends Command {
     };
 
     async execute(params: any): Promise<Record<string, any>> {
-        let screen = params.screen ?? 'desktop';
+        const screen = params.screen ?? 'desktop';
         puppeteer.use(StealthPlugin());
         puppeteer.use(
             AdBlockPlugin({
@@ -107,7 +104,7 @@ export class Stop extends Command {
     async execute({ session_id }: { session_id: string }): Promise<any> {
         // close page
         if (this.sessions[session_id]?.page) {
-            const progress_data_state = await new ExtractCleanHtml(this.sessions).execute({ selector: 'html', session_id });
+            await new ExtractCleanHtml(this.sessions).execute({ selector: 'html', session_id });
             await this.sessions[session_id]?.page?.close();
 
             this.sessions[session_id].page = undefined;
@@ -202,7 +199,7 @@ export class Navigate extends Command {
         const page = this.sessions[params.session_id].page;
         await page.goto(params.url, { waitUntil: ['domcontentloaded', 'networkidle2'] });
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        const { progress_data_state, screenshot } = await new ExtractCleanHtml(this.sessions).execute({
+        const { progress_data_state, screenshot: _screenshot } = await new ExtractCleanHtml(this.sessions).execute({
             selector: 'html',
             session_id: params.session_id,
         });
