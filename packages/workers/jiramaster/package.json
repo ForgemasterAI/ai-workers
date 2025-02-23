@@ -1,7 +1,7 @@
 {
     "name": "@forgemater-workers/twittermaster",
     "version": "1.0.0",
-    "main": "src/index.ts",
+    "main": "src/jira.master.ts",
     "scripts": {
         "build": "tsc"
     },
@@ -10,5 +10,11 @@
     },
     "devDependencies": {
         "typescript": "^5.7.3"
+    },
+    "exports": {
+        ".": {
+            "import": "./src/jira.master.ts",
+            "require": "./dist/jira.master.js"
+        }
     }
 }
