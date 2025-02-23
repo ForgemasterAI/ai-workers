@@ -1,9 +1,41 @@
-import assert from 'assert';
-import { randomUUID } from 'crypto';
-import { Command } from './command.abstract';
-import winston from 'winston';
+import winston from "winston";
+import { Command } from "./command.abstract";
 
-const logger = winston.createLogger({
+// Conditionally import assert. In browser, use custom assert function.
+let assertFn: { ok: any; };
+if (typeof process !== 'undefined' && process.env) {
+    // Node environment
+    // Using Node's assert module
+    const assertModule = import('assert');
+    assertFn = assertModule;
+} else {
+    // Browser environment: simple assert implementation
+    assertFn = { ok: (cond: any, msg: string) => { if (!cond) throw new Error(msg); } };
+}
+
+// Determine if environment is Browser
+const isBrowser = typeof window !== 'undefined';
+
+// UUID generator function that works in both environments
+function generateUUID(): string {
+    if (!isBrowser) {
+        // Node environment: use crypto.randomUUID
+        return import('crypto').randomUUID();
+    } else if (window.crypto && window.crypto.randomUUID) {
+        return window.crypto.randomUUID();
+    } else {
+        throw new Error('No UUID generation available.');
+    }
+}
+
+// Setup logger: if in browser, fallback to console
+const logger = isBrowser ? {
+    debug: console.debug.bind(console),
+    info: console.info.bind(console),
+    warn: console.warn.bind(console),
+    error: console.error.bind(console),
+    level: 'debug'
+} : winston.createLogger({
     level: process.env.LOG_LEVEL || 'debug',
     format: winston.format.combine(
         winston.format.colorize(),
@@ -35,16 +67,18 @@ export class RemoteWorker {
 
     private supportedCommands: Command[] = [];
 
-    constructor({ tickRate = 1, commandContext = '' } = {}) {
-        this.GRAPHQL_ENDPOINT = process.env.GRAPHQL_ENDPOINT || 'http://localhost:3030/graphql';
-        this.ID = process.env.WORKER_ID || randomUUID();
-        this.API_KEY = process.env.API_KEY;
+    constructor({ tickRate = 1, commandContext = '', fmJwt = undefined } = {}) {
+        // Use conditional environment access for process.env
+        this.GRAPHQL_ENDPOINT = (typeof process !== 'undefined' && process.env && process.env.GRAPHQL_ENDPOINT) || 'http://localhost:3030/graphql';
+        this.ID = (typeof process !== 'undefined' && process.env && process.env.WORKER_ID) || generateUUID();
+        this.API_KEY = (typeof process !== 'undefined' && process.env && process.env.API_KEY) || undefined;
+        this.FM_JWT = fmJwt;
         this.TICK_RATE = tickRate;
         this.STATE = {
             progress: [],
         };
         this.WORKER_COMMAND_REQUEST_INSTRUCTION = commandContext;
-        assert.ok(this.GRAPHQL_ENDPOINT, 'GRAPHQL_ENDPOINT is not defined');
+        assertFn.ok(this.GRAPHQL_ENDPOINT, 'GRAPHQL_ENDPOINT is not defined');
         logger.info(`This is a new worker with ID: ${this.ID}`);
     }
 
@@ -137,8 +171,8 @@ export class RemoteWorker {
     }
 
     private hrtimeMs() {
-        const time = process.hrtime();
-        return time[0] * 1000 + time[1] / 1000000;
+        const time = (typeof process !== 'undefined' && process.hrtime) ? process.hrtime() : [Date.now(), 0];
+        return (time[0] * 1000) + (time[1] / 1000000);
     }
 
     private loop() {
@@ -395,7 +429,8 @@ export class RemoteWorker {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'x-fm-key': `${this.API_KEY}`,
+                        ...(this.API_KEY && {'x-fm-key': `${this.API_KEY}`}),
+                        ...(this.FM_JWT && {'Authorization': `Bearer ${this.FM_JWT}`}),
                     },
                     body: JSON.stringify({ query, variables }),
                     signal: controller.signal,
