@@ -1,7 +1,7 @@
-import { RemoteWorker } from '../../core/src/register-worker';
+import { RemoteWorker } from '../../../core/src/register-worker';
 import { Click, ExtractCleanHtml, Navigate, Select, Start, Stop, Type } from './commands';
 
-class PupperMaster extends RemoteWorker {
+export class PupperMaster extends RemoteWorker {
     sessions: Record<string, any>;
     constructor() {
         super({
@@ -58,4 +58,4 @@ class PupperMaster extends RemoteWorker {
     }
 }
 
-export const remoteWorker = new PupperMaster();
+

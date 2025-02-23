@@ -1,9 +1,9 @@
-import { RemoteWorker } from '../../core/src/register-worker';
-import { Command } from '../../core/src/command.abstract';
+import { RemoteWorker } from '../../../core/src/register-worker';
+import { Command } from '../../../core/src/command.abstract';
 import { ListProjects } from './commands/ListProjects';
 import { GetProjectDetails } from './commands/GetProjectDetails';
 import { CreateIssue } from './commands/CreateIssue';
-import { ListIssues } from './commands/ListIssues'
+import { ListIssues } from './commands/ListIssues';
 import { JiraClient } from './jira.client';
 
 class Start extends Command {
@@ -20,7 +20,7 @@ class Start extends Command {
     # Start a new session
     This command starts a new session and returns a session id.
     `;
-    async execute(params: { sessions: Record<string, unknown>, session_id?: string }): Promise<{ session_id: string }> {
+    async execute(params: { sessions: Record<string, unknown>; session_id?: string }): Promise<{ session_id: string }> {
         const { sessions, session_id } = params;
         const newSessionId = session_id || Date.now().toString();
         sessions[newSessionId] = {};
@@ -53,13 +53,16 @@ export class JiraMaster extends RemoteWorker {
     token: string;
     cloudId: string;
 
-    constructor() {
+    constructor(token: string, cloudId: string) {
         super({
             commandContext: `
             # Jira API Guide
             This worker uses the Jira API to interact with Jira
             `,
         });
+        this.token = token;
+        this.cloudId = cloudId;
+
         this.sessions = {};
         this.jiraClient = new JiraClient(this.token, this.cloudId);
 
@@ -72,5 +75,3 @@ export class JiraMaster extends RemoteWorker {
         this.registerCommand(new ListProjects(this.jiraClient));
     }
 }
-
-export const jiraMaster = new JiraMaster();

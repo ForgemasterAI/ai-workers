@@ -16,7 +16,7 @@ export class PublishTweet extends Command {
                         url: { type: 'string' },
                         type: { type: 'string', enum: ['image', 'video', 'gif'] },
                     },
-                    required: ['url', 'type']
+                    required: ['url', 'type'],
                 },
             },
         },
@@ -47,31 +47,34 @@ export class PublishTweet extends Command {
         }
     }
 
-    async execute(params: { text: string, mediaUrls?: { url: string, type: 'image' | 'video' | 'gif' }[] }): Promise<unknown> {
+    async execute(params: { text: string; mediaUrls?: { url: string; type: 'image' | 'video' | 'gif' }[] }): Promise<unknown> {
         const { text, mediaUrls } = params;
         let mediaIds: string[] = [];
         let tweet: unknown;
         if (!text) {
             throw new Error('Text is required to publish a tweet');
         }
+        if (mediaUrls && mediaUrls.length > 4) {
+            throw new Error('You can only upload 4 media files per tweet');
+        }
         if (mediaUrls && mediaUrls.length > 0) {
             mediaIds = await Promise.all(
-                mediaUrls.map(async (media: { url: string, type: 'image' | 'video' | 'gif' }) => {
+                mediaUrls.map(async (media: { url: string; type: 'image' | 'video' | 'gif' }) => {
                     const response = await axios.get(media.url, { responseType: 'arraybuffer' });
                     const mediaData = Buffer.from(response.data, 'binary');
-                    const options: { mimeType: string, longVideo?: boolean } = { mimeType: this.getMimeType(media.type) };
+                    const options: { mimeType: string; longVideo?: boolean } = { mimeType: this.getMimeType(media.type) };
                     if (media.type === 'video') {
                         options.longVideo = true;
                     }
                     return await this.twitterClient.v1.uploadMedia(mediaData, options);
-                })
+                }),
             );
         }
         if (mediaIds.length > 4) {
             throw new Error('You can only upload 4 media files per tweet');
         }
         if (mediaIds.length > 0 && mediaIds.length <= 4) {
-            tweet = await this.twitterClient.v2.tweet(text, { media: { media_ids: mediaIds } });
+            tweet = await this.twitterClient.v2.tweet(text, { media: { media_ids: mediaIds as any } });
         } else {
             tweet = await this.twitterClient.v2.tweet(text);
         }

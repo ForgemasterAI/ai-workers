@@ -1,4 +1,4 @@
-import { Command } from '../../../core/src/command.abstract';
+import { Command } from '../../../../core/src/command.abstract';
 
 export class CreateIssue extends Command {
     command = 'createIssue';
@@ -7,9 +7,9 @@ export class CreateIssue extends Command {
         properties: {
             projectId: { type: 'string' },
             summary: { type: 'string' },
-            description: { type: 'string' }
+            description: { type: 'string' },
         },
-        required: ['projectId', 'summary']
+        required: ['projectId', 'summary'],
     };
     instruction = `
     # Create Jira Issue

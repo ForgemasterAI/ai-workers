@@ -1,4 +1,4 @@
-import { Command } from '../../../core/src/command.abstract';
+import { Command } from '../../../../core/src/command.abstract';
 import { JiraClient } from '../jira.client';
 
 export class GetProjectDetails extends Command {
@@ -8,7 +8,7 @@ export class GetProjectDetails extends Command {
         properties: {
             projectId: { type: 'string' },
         },
-        required: ['projectId']
+        required: ['projectId'],
     };
     instruction = `
     # Get Project Details

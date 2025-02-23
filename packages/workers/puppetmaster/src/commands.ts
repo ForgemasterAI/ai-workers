@@ -1,11 +1,9 @@
 import { DEFAULT_INTERCEPT_RESOLUTION_PRIORITY } from 'puppeteer';
 import * as cheerio from 'cheerio';
-import { Command } from '../../core/src/command.abstract';
+import { Command } from '../../../core/src/command.abstract';
 import AdBlockPlugin from 'puppeteer-extra-plugin-adblocker';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import puppeteer from 'puppeteer-extra';
-
-
 
 export class Start extends Command {
     sessions: Record<string, any>;

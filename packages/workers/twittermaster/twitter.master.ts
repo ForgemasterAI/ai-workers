@@ -17,7 +17,7 @@ class Start extends Command {
     # Start a new session
     This command starts a new session and returns a session id.
     `;
-    async execute(params: { sessions: Record<string, unknown>, session_id?: string }): Promise<{ session_id: string }> {
+    async execute(params: { sessions: Record<string, unknown>; session_id?: string }): Promise<{ session_id: string }> {
         const { sessions, session_id } = params;
         const newSessionId = session_id || Date.now().toString();
         sessions[newSessionId] = {};
